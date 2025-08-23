@@ -14,6 +14,11 @@ ACOUT1_L3_POWER_PATH = '/Ac/ConsumptionOnOutput/L3/Power'
 # D-Bus path for writing to com.victronenergy.settings
 GRID_SETPOINT_PATH = '/Settings/CGwacs/AcPowerSetPoint'
 
+# Maximal discharge power path
+MAX_DISCHARGE_PATH = '/Settings/CGwacs/MaxDischargePower'
+# Discharging is allowed when SoC is equal to or above this threshold
+DISCHARGE_SOC_LIMIT = 85
+
 # Mapping: SoC (%) -> offset in watts (min_soc, max_soc, offset)
 SOC_RANGES = [
     ( 0,  85,  200),  # 0–85 %
@@ -55,7 +60,7 @@ class GridPointController:
 
     def write_setting(self, path, value):
         """
-        Write a value to a Settings path using com.victronenergy.Settings API.
+        Write a value to a settings path using com.victronenergy.settings API.
         """
         try:
             obj = self.bus.get_object('com.victronenergy.settings', path)
@@ -63,11 +68,25 @@ class GridPointController:
         except Exception as e:
             print(f"Error writing {path}: {e}")
 
+    def update_discharge_limit(self, soc):
+        """
+        Sets MaxDischargePower to -1 to allow discharging if SoC is equal to or above the threshold.
+        Otherwise sets it to 0 to prevent discharging.
+        Logs the change for debugging purposes.
+        """
+        value = -1 if soc >= DISCHARGE_SOC_LIMIT else 0
+        self.write_setting(MAX_DISCHARGE_PATH, value)
+        print(f"[DischargeControl] SoC: {soc:.1f} % → MaxDischargePower set to {value}")
+
     def update_setpoint(self):
         """
         Read SoC and total load, then adjust grid setpoint according to SOC_RANGES.
         """
         soc = self.read_value(SOC_PATH)
+
+        # Disallow discharge when SoC under limit
+        self.update_discharge_limit(soc)
+
         load_L1 = self.read_value(ACOUT1_L1_POWER_PATH)
         load_L2 = self.read_value(ACOUT1_L2_POWER_PATH)
         load_L3 = self.read_value(ACOUT1_L3_POWER_PATH)
