@@ -18,10 +18,12 @@ GRID_SETPOINT_PATH = '/Settings/CGwacs/AcPowerSetPoint'
 MAX_DISCHARGE_PATH = '/Settings/CGwacs/MaxDischargePower'
 # Discharging is allowed when SoC is equal to or above this threshold
 DISCHARGE_SOC_LIMIT = 85
+# Margin for hysteresis to prevent frequent toggling
+DISCHARGE_HYSTERESIS_MARGIN = 1
 
 # Mapping: SoC (%) -> offset in watts (min_soc, max_soc, offset)
 SOC_RANGES = [
-    ( 0,  85,  200),  # 0–85 %
+    ( 0,  85,  500),  # 0–85 %
     (86,  86, 1000),  # 86 %
     (87,  87, 2500),  # 87 %
     (88,  88, 3500),  # 88 %
@@ -41,8 +43,8 @@ class GridPointController:
         # Connect to the system D-Bus
         self.bus = dbus.SystemBus()
 
-        # Root of settings service for writing
-        self.settings_service = self.bus.get_object('com.victronenergy.settings', '/')
+        # Initial state for discharge hysteresis
+        self.discharge_allowed = None
 
         # Schedule update every 5 seconds (5000 ms)
         GLib.timeout_add(5000, self.update_setpoint)
@@ -70,13 +72,32 @@ class GridPointController:
 
     def update_discharge_limit(self, soc):
         """
-        Sets MaxDischargePower to -1 to allow discharging if SoC is equal to or above the threshold.
-        Otherwise sets it to 0 to prevent discharging.
-        Logs the change for debugging purposes.
+        Applies hysteresis logic to control MaxDischargePower based on SoC.
+        Discharging is allowed when SoC is above the threshold.
+        Once allowed, it remains allowed until SoC drops below (threshold - margin).
         """
-        value = -1 if soc >= DISCHARGE_SOC_LIMIT else 0
-        self.write_setting(MAX_DISCHARGE_PATH, value)
-        print(f"[DischargeControl] SoC: {soc:.1f} % → MaxDischargePower set to {value}")
+        write_change = False
+        if self.discharge_allowed is None:
+            # Initialize discharge state on first run
+            self.discharge_allowed = soc >= DISCHARGE_SOC_LIMIT
+            write_change = True
+
+        if self.discharge_allowed:
+            # Discharging is currently allowed; disable it only if SoC drops below the lower bound
+            if soc < DISCHARGE_SOC_LIMIT - DISCHARGE_HYSTERESIS_MARGIN:
+                self.discharge_allowed = False
+                write_change = True
+        else:
+            # Discharging is currently disabled; enable it only if SoC reaches the threshold
+            if soc >= DISCHARGE_SOC_LIMIT:
+                self.discharge_allowed = True
+                write_change = True
+
+        if write_change:
+            # -1 means unlimited discharge
+            value = -1 if self.discharge_allowed else 0
+            self.write_setting(MAX_DISCHARGE_PATH, value)
+            print(f"[DischargeControl] SoC: {soc:.1f} % → DischargeAllowed: {self.discharge_allowed} → MaxDischargePower: {value}")
 
     def update_setpoint(self):
         """
