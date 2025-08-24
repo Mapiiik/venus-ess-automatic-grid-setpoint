@@ -18,7 +18,7 @@ GRID_SETPOINT_PATH = '/Settings/CGwacs/AcPowerSetPoint'
 # Maximal discharge power path
 MAX_DISCHARGE_PATH = '/Settings/CGwacs/MaxDischargePower'
 # Max discharge power allowed during night (W)
-MAX_NIGHT_DISCHARGE = 3000
+MAX_NIGHT_DISCHARGE = 1600
 # Discharging is allowed when SoC is equal to or above this threshold
 DISCHARGE_SOC_LIMIT = 85
 # Margin for hysteresis to prevent frequent toggling
