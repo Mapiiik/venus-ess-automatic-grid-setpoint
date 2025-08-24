@@ -24,7 +24,7 @@ DISCHARGE_HYSTERESIS_MARGIN = 1
 # Mapping: SoC (%) -> offset in watts (min_soc, max_soc, offset)
 SOC_RANGES = [
     ( 0,  85,  500),  # 0–85 %
-    (86,  86, 1000),  # 86 %
+    (86,  86, 1500),  # 86 %
     (87,  87, 2500),  # 87 %
     (88,  88, 3500),  # 88 %
     (89,  89, 4000),  # 89 %
