@@ -46,6 +46,10 @@ class GridPointController:
         # Initial state for discharge hysteresis
         self.discharge_allowed = None
 
+        # Setpoint buffer
+        self.last_setpoint = None  # Stores previous grid setpoint for gradual adjustment
+        self.setpoint_step = 100   # Max change per cycle in watts
+
         # Schedule update every 5 seconds (5000 ms)
         GLib.timeout_add(5000, self.update_setpoint)
 
@@ -101,25 +105,41 @@ class GridPointController:
 
     def update_setpoint(self):
         """
-        Read SoC and total load, then adjust grid setpoint according to SOC_RANGES.
+        Read SoC and total load, then gradually adjust grid setpoint toward target.
         """
         soc = self.read_value(SOC_PATH)
 
-        # Disallow discharge when SoC under limit
+        # Update discharge limit based on SoC
         self.update_discharge_limit(soc)
 
+        # Read current load
         load_L1 = self.read_value(ACOUT1_L1_POWER_PATH)
         load_L2 = self.read_value(ACOUT1_L2_POWER_PATH)
         load_L3 = self.read_value(ACOUT1_L3_POWER_PATH)
 
         total_load = load_L1 + load_L2 + load_L3
         offset = get_offset_for_soc(soc)
+        target_setpoint = total_load - offset
 
-        new_setpoint = total_load - offset
+        # Initialize last_setpoint if needed
+        if self.last_setpoint is None:
+            self.last_setpoint = target_setpoint
+
+        # Gradually move toward target
+        delta = target_setpoint - self.last_setpoint
+        if abs(delta) <= self.setpoint_step:
+            new_setpoint = target_setpoint
+        else:
+            step = self.setpoint_step if delta > 0 else -self.setpoint_step
+            new_setpoint = self.last_setpoint + step
+
+        # Update stored value
+        self.last_setpoint = new_setpoint
 
         print(f"SoC: {soc:.1f} %, L1: {load_L1:.1f} W, L2: {load_L2:.1f} W, "
             f"L3: {load_L3:.1f} W, Total: {total_load:.1f} W, "
-            f"Offset: {offset} W, Setpoint: {new_setpoint:.1f} W")
+            f"Offset: {offset} W, Target: {target_setpoint:.1f} W, "
+            f"Setpoint: {new_setpoint:.1f} W")
 
         self.write_setting(GRID_SETPOINT_PATH, new_setpoint)
         return True  # Keep the timer running
