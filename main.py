@@ -1,6 +1,7 @@
 #!/usr/bin/python3 -u
 # -*- coding: utf-8 -*-
 
+from datetime import datetime
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 import dbus
@@ -16,6 +17,8 @@ GRID_SETPOINT_PATH = '/Settings/CGwacs/AcPowerSetPoint'
 
 # Maximal discharge power path
 MAX_DISCHARGE_PATH = '/Settings/CGwacs/MaxDischargePower'
+# Max discharge power allowed during night (W)
+MAX_NIGHT_DISCHARGE = 3000
 # Discharging is allowed when SoC is equal to or above this threshold
 DISCHARGE_SOC_LIMIT = 85
 # Margin for hysteresis to prevent frequent toggling
@@ -119,6 +122,12 @@ class GridPointController:
 
         total_load = load_L1 + load_L2 + load_L3
         offset = get_offset_for_soc(soc)
+
+        # Apply nighttime discharge limit
+        now = datetime.now().time()
+        if now >= datetime.strptime("19:00", "%H:%M").time() or now <= datetime.strptime("05:00", "%H:%M").time():
+            offset = min(offset, MAX_NIGHT_DISCHARGE)
+
         target_setpoint = total_load - offset
 
         # Initialize last_setpoint if needed
