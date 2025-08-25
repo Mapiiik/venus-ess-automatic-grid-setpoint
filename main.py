@@ -8,6 +8,7 @@ import dbus
 
 # D-Bus paths for reading from com.victronenergy.system
 SOC_PATH = '/Dc/Battery/Soc'
+DC_POWER_PATH = '/Dc/Battery/Power'
 ACOUT1_L1_POWER_PATH = '/Ac/ConsumptionOnOutput/L1/Power'
 ACOUT1_L2_POWER_PATH = '/Ac/ConsumptionOnOutput/L2/Power'
 ACOUT1_L3_POWER_PATH = '/Ac/ConsumptionOnOutput/L3/Power'
@@ -17,6 +18,8 @@ GRID_SETPOINT_PATH = '/Settings/CGwacs/AcPowerSetPoint'
 
 # Maximal discharge power path
 MAX_DISCHARGE_PATH = '/Settings/CGwacs/MaxDischargePower'
+# Max discharge power allowed during day (W)
+MAX_DAY_DISCHARGE = 4500
 # Max discharge power allowed during night (W)
 MAX_NIGHT_DISCHARGE = 1600
 # Discharging is allowed when SoC is equal to or above this threshold
@@ -52,6 +55,9 @@ class GridPointController:
         # Setpoint buffer
         self.last_setpoint = None  # Stores previous grid setpoint for gradual adjustment
         self.setpoint_step = 100   # Max change per cycle in watts
+
+        # DC offset buffer
+        self.dc_offset = 0
 
         # Schedule update every 5 seconds (5000 ms)
         GLib.timeout_add(5000, self.update_setpoint)
@@ -109,8 +115,12 @@ class GridPointController:
     def update_setpoint(self):
         """
         Read SoC and total load, then gradually adjust grid setpoint toward target.
+        If DC power is positive (incoming energy), increase the target accordingly.
         """
+        # Read current battery SoC
         soc = self.read_value(SOC_PATH)
+        # Read current DC power (positive means charging from PV or other source)
+        dc_power = self.read_value(DC_POWER_PATH)
 
         # Update discharge limit based on SoC
         self.update_discharge_limit(soc)
@@ -121,14 +131,27 @@ class GridPointController:
         load_L3 = self.read_value(ACOUT1_L3_POWER_PATH)
 
         total_load = load_L1 + load_L2 + load_L3
-        offset = get_offset_for_soc(soc)
+        soc_offset = get_offset_for_soc(soc)
 
-        # Apply nighttime discharge limit
         now = datetime.now().time()
-        if now >= datetime.strptime("19:00", "%H:%M").time() or now <= datetime.strptime("05:00", "%H:%M").time():
-            offset = min(offset, MAX_NIGHT_DISCHARGE)
 
-        target_setpoint = total_load - offset
+        # Apply daytime maximal discharge limit
+        night_start = datetime.strptime("19:00", "%H:%M").time()
+        night_end = datetime.strptime("05:00", "%H:%M").time()
+
+        if now >= night_start or now <= night_end:
+            max_power_limit = MAX_NIGHT_DISCHARGE
+        else:
+            max_power_limit = MAX_DAY_DISCHARGE
+
+        # Apply power boost during surplus from PV
+        if dc_power > 0:
+            self.dc_offset = min(max_power_limit - soc_offset, self.dc_offset + min(dc_power, self.setpoint_step))
+        else:
+            self.dc_offset = max(0, self.dc_offset + max(dc_power, -self.setpoint_step))
+
+        # Base target setpoint
+        target_setpoint = total_load - min(soc_offset + self.dc_offset, max_power_limit)
 
         # Initialize last_setpoint if needed
         if self.last_setpoint is None:
@@ -146,8 +169,9 @@ class GridPointController:
         self.last_setpoint = new_setpoint
 
         print(f"SoC: {soc:.1f} %, L1: {load_L1:.1f} W, L2: {load_L2:.1f} W, "
-            f"L3: {load_L3:.1f} W, Total: {total_load:.1f} W, "
-            f"Offset: {offset} W, Target: {target_setpoint:.1f} W, "
+            f"L3: {load_L3:.1f} W, Total: {total_load:.1f} W, DC Power: {dc_power:.1f} W, "
+            f"SoC Offset: {soc_offset} W, DC Offset: {self.dc_offset:.1f} W, "
+            f"Max Power Limit: {max_power_limit:.1f} W, Target: {target_setpoint:.1f} W, "
             f"Setpoint: {new_setpoint:.1f} W")
 
         self.write_setting(GRID_SETPOINT_PATH, new_setpoint)
