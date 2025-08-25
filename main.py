@@ -56,8 +56,8 @@ class GridPointController:
         self.last_setpoint = None  # Stores previous grid setpoint for gradual adjustment
         self.setpoint_step = 100   # Max change per cycle in watts
 
-        # DC offset buffer
-        self.dc_offset = 0
+        # Power target
+        self.power_target = 0
 
         # Schedule update every 5 seconds (5000 ms)
         GLib.timeout_add(5000, self.update_setpoint)
@@ -146,12 +146,12 @@ class GridPointController:
 
         # Apply power boost during surplus from PV
         if dc_power > 0:
-            self.dc_offset = min(max_power_limit - soc_offset, self.dc_offset + min(dc_power, self.setpoint_step))
+            self.power_target = min(max_power_limit, self.power_target + min(dc_power, self.setpoint_step))
         else:
-            self.dc_offset = max(0, self.dc_offset + max(dc_power, -self.setpoint_step))
+            self.power_target = max(soc_offset, self.power_target + max(dc_power, -self.setpoint_step))
 
         # Base target setpoint
-        target_setpoint = total_load - min(soc_offset + self.dc_offset, max_power_limit)
+        target_setpoint = total_load - min(self.power_target, max_power_limit)
 
         # Initialize last_setpoint if needed
         if self.last_setpoint is None:
@@ -170,7 +170,7 @@ class GridPointController:
 
         print(f"SoC: {soc:.1f} %, L1: {load_L1:.1f} W, L2: {load_L2:.1f} W, "
             f"L3: {load_L3:.1f} W, Total: {total_load:.1f} W, DC Power: {dc_power:.1f} W, "
-            f"SoC Offset: {soc_offset} W, DC Offset: {self.dc_offset:.1f} W, "
+            f"SoC Offset: {soc_offset} W, Power Target: {self.power_target:.1f} W, "
             f"Max Power Limit: {max_power_limit:.1f} W, Target: {target_setpoint:.1f} W, "
             f"Setpoint: {new_setpoint:.1f} W")
 
