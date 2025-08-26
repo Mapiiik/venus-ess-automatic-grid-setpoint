@@ -150,11 +150,15 @@ class GridPointController:
         else:
             max_power_limit = MAX_DAY_DISCHARGE
 
-        # Apply power boost during surplus from PV
+        # Calculate power target and apply power boost during surplus from PV
         if dc_power > 0:
             self.power_target = min(max_power_limit, self.power_target + min(dc_power, self.setpoint_step))
         else:
             self.power_target = max(soc_offset, self.power_target + max(dc_power, -self.setpoint_step))
+        
+        # Set zero power target if discharge is diasallowed
+        if self.discharge_allowed is False:
+            self.power_target = 0
 
         # Base target setpoint
         target_setpoint = total_load - min(self.power_target, max_power_limit)
