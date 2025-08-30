@@ -180,12 +180,16 @@ class GridPointController:
             if soc >= DISCHARGE_SOC_LIMIT:
                 self.discharge_allowed = True
                 write_change = True
+
                 # Reset grid setpoint and power target (for slow ramp-up of power)
                 # If DC power is positive (which it usually will be here), power_target will ramp up
                 # by self.setpoint_step W per cycle. Otherwise, it will jump straight to min_power_limit.
-                self.power_target = 0.0
+                #self.power_target = 0.0
+                # After the code changes, this value should be already zero or equal to the negated value of the planned charging power.
+
                 # Force recalculation of last_setpoint in this cycle based on current load and offsets
-                self.last_setpoint = None
+                #self.last_setpoint = None
+                # After the code changes, it should be fine, no need to force it.
 
         if write_change:
             # -1 means unlimited discharge
