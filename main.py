@@ -36,23 +36,35 @@ DISCHARGE_SOC_LIMIT = 85
 # Margin for hysteresis to prevent frequent toggling
 DISCHARGE_HYSTERESIS_MARGIN = 1
 
-# Mapping: SoC (%) -> offset in watts (min_soc, max_soc, offset)
+# Mapping: SoC (%) -> minimal inverter power in watts, dc power target in watts (min_soc, max_soc, min_power_limit, dc_power_target)
 SOC_RANGES = [
-    ( 0,  85,  500),  # 0–85 %
-    (86,  86, 1500),  # 86 %
-    (87,  87, 2500),  # 87 %
-    (88,  88, 3500),  # 88 %
-    (89,  89, 4000),  # 89 %
-    (90, 100, 4500)   # 90-100 %
+    (  0,  84,  500,   100),   # 0–84 %, 500 W min. inverter power, charge battery with 100 W
+    ( 85,  85,  500,     0),   # 85 %, 500 W min. inverter power, keep battery idle
+    ( 86,  86, 1000,  -100),   # 86 %, 1000 W min. inverter power, discharge with 100 W
+    ( 87,  87, 1500,  -500),   # 87 %, 1500 W min. inverter power, discharge with 500 W
+    ( 88,  88, 2000, -1000),   # 88 %, 2000 W min. inverter power, discharge with 1000 W
+    ( 89,  89, 3000, -2000),   # 89 %, 3000 W min. inverter power, discharge with 2000 W
+    ( 90, 100, 4000, -3000)    # 90–100 %, 4000 W min. inverter power, discharge with 3000 W
 ]
 
-def get_offset_for_soc(soc_value):
+def get_limits_for_soc(soc_value):
     soc_int = int(soc_value)
-    for min_soc, max_soc, offset in SOC_RANGES:
+    for min_soc, max_soc, min_power_limit, dc_power_target in SOC_RANGES:
         if min_soc <= soc_int <= max_soc:
-            return offset
-    return 0
+            return min_power_limit, dc_power_target
+    return 0.0, 0.0
 
+def validate_soc_ranges():
+    prev_max = -1
+    for lo, hi, *_ in SOC_RANGES:
+        if lo != prev_max + 1:
+            raise ValueError("Gap or overlap in SOC_RANGES")
+        prev_max = hi
+    if prev_max != 100:
+        raise ValueError("Last max_soc must be 100 in SOC_RANGES")
+
+# Validation will take place during module import.
+validate_soc_ranges()
 class GridPointController:
     def __init__(self):
         # Connect to the system D-Bus
@@ -63,10 +75,10 @@ class GridPointController:
 
         # Setpoint buffer
         self.last_setpoint = None  # Stores previous grid setpoint for gradual adjustment
-        self.setpoint_step = 100   # Max change per cycle in watts
+        self.setpoint_step = 100.0   # Max change per cycle in watts
 
         # Power target
-        self.power_target = 0
+        self.power_target = 0.0
 
         # Schedule update every 5 seconds (5000 ms)
         GLib.timeout_add(5000, self.update_setpoint)
@@ -117,6 +129,35 @@ class GridPointController:
             # Interval crosses midnight (e.g., 22:00–06:00)
             return now_time >= start or now_time < end
 
+    def get_new_power_target(
+        self,
+        dc_power: float,
+        dc_power_target: float,
+        min_power_limit: float,
+        max_power_limit: float,
+    ) -> float:
+        """
+        Adjust the current power_target one step toward the difference
+        between dc_power and dc_power_target, clamped to [min_power_limit, max_power_limit].
+
+        dc_power           - current DC power to the battery
+        dc_power_target    - desired DC power into(+)/from(-) battery
+        min_power_limit    - minimal inverter power limit
+        max_power_limit    - maximum inverter power limit
+        """
+        # If there is surplus DC power from PV, increase the target but not over max_power_limit
+        if dc_power > dc_power_target:
+            return min(
+                max_power_limit,
+                self.power_target + min(dc_power - dc_power_target, self.setpoint_step)
+            )
+        # If there is a deficit, decrease the target but not below min_power_limit
+        else:
+            return max(
+                min_power_limit,
+                self.power_target + max(dc_power - dc_power_target, -self.setpoint_step)
+            )
+
     def update_discharge_limit(self, soc):
         """
         Applies hysteresis logic to control MaxDischargePower based on SoC.
@@ -141,8 +182,8 @@ class GridPointController:
                 write_change = True
                 # Reset grid setpoint and power target (for slow ramp-up of power)
                 # If DC power is positive (which it usually will be here), power_target will ramp up
-                # by self.setpoint_step W per cycle. Otherwise, it will jump straight to soc_offset.
-                self.power_target = 0
+                # by self.setpoint_step W per cycle. Otherwise, it will jump straight to min_power_limit.
+                self.power_target = 0.0
                 # Force recalculation of last_setpoint in this cycle based on current load and offsets
                 self.last_setpoint = None
 
@@ -171,7 +212,7 @@ class GridPointController:
         load_L3 = self.read_value(ACOUT1_L3_POWER_PATH)
 
         total_load = load_L1 + load_L2 + load_L3
-        soc_offset = get_offset_for_soc(soc)
+        min_power_limit, dc_power_target = get_limits_for_soc(soc)
 
         # Determine max power limit based on time of day
         # Night mode: from 21:00 to 07:00 → use MAX_NIGHT_DISCHARGE
@@ -185,39 +226,27 @@ class GridPointController:
         # and the current time is between 10:00 and 22:00
         if self.in_time_range("10:00", "22:00", weekday=SCHEDULED_CHARGE_DAY):
             mode = "Scheduled charge"
-            # If there is surplus DC power from PV, increase the target
-            if dc_power > SCHEDULED_CHARGE_POWER:
-                self.power_target = min(
-                    max_power_limit,
-                    self.power_target + min(dc_power - SCHEDULED_CHARGE_POWER, self.setpoint_step)
-                )
-            # If there is a deficit, decrease the target but not below -SCHEDULED_CHARGE_POWER
-            else:
-                self.power_target = max(
-                    -SCHEDULED_CHARGE_POWER,
-                    self.power_target + max(dc_power - SCHEDULED_CHARGE_POWER, -self.setpoint_step)
-                )
+            self.power_target = self.get_new_power_target(
+                dc_power=dc_power,
+                dc_power_target=SCHEDULED_CHARGE_POWER,
+                min_power_limit=-SCHEDULED_CHARGE_POWER,
+                max_power_limit=max_power_limit
+            )
+
+        # If discharging is allowed, calculate the power target dynamically
+        elif self.discharge_allowed is True:
+            mode = "Normal"
+            self.power_target = self.get_new_power_target(
+                dc_power=dc_power,
+                dc_power_target=dc_power_target,
+                min_power_limit=min_power_limit,
+                max_power_limit=max_power_limit
+            )
 
         # If discharging is not allowed, set power target to zero
-        elif self.discharge_allowed is False:
-            mode = "No discharge"
-            self.power_target = 0
-
-        # Otherwise, calculate the power target dynamically
         else:
-            mode = "Normal"
-            # If there is surplus DC power from PV, increase the target
-            if dc_power > 0:
-                self.power_target = min(
-                    max_power_limit,
-                    self.power_target + min(dc_power, self.setpoint_step)
-                )
-            # If there is a deficit, decrease the target but not below soc_offset
-            else:
-                self.power_target = max(
-                    soc_offset,
-                    self.power_target + max(dc_power, -self.setpoint_step)
-                )
+            mode = "No discharge"
+            self.power_target = 0.0
         
         # Base target setpoint
         target_setpoint = total_load - min(self.power_target, max_power_limit)
@@ -237,11 +266,15 @@ class GridPointController:
         # Update stored value
         self.last_setpoint = new_setpoint
 
-        print(f"[{mode}] SoC: {soc:.1f} %, L1: {load_L1:.1f} W, L2: {load_L2:.1f} W, "
-            f"L3: {load_L3:.1f} W, Total: {total_load:.1f} W, DC Power: {dc_power:.1f} W, "
-            f"SoC Offset: {soc_offset} W, Power Target: {self.power_target:.1f} W, "
-            f"Max Power Limit: {max_power_limit:.1f} W, Target: {target_setpoint:.1f} W, "
-            f"Setpoint: {new_setpoint:.1f} W")
+        print(
+            f"[{mode}] "
+            f"SoC: {soc:5.1f} %, "
+            f"L1: {load_L1:8.1f} W, L2: {load_L2:8.1f} W, L3: {load_L3:8.1f} W, "
+            f"Total: {total_load:8.1f} W, DC Power: {dc_power:8.1f} W, "
+            f"Min Power Limit: {min_power_limit:8.1f} W, Max Power Limit: {max_power_limit:8.1f} W, "
+            f"Power Target: {self.power_target:8.1f} W, "
+            f"Target: {target_setpoint:8.1f} W, Setpoint: {new_setpoint:8.1f} W"
+        )
 
         self.write_setting(GRID_SETPOINT_PATH, new_setpoint)
         return True  # Keep the timer running
