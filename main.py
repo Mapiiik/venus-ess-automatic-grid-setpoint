@@ -30,7 +30,7 @@ MAX_NIGHT_DISCHARGE = 1600
 # Scheduled charge day (W) (0=Monday, ..., 6=Sunday)
 SCHEDULED_CHARGE_DAY = 6
 # Scheduled charge power (W)
-SCHEDULED_CHARGE_POWER = 500
+SCHEDULED_CHARGE_POWER = 1000
 # Discharging is allowed when SoC is equal to or above this threshold
 DISCHARGE_SOC_LIMIT = 85
 # Margin for hysteresis to prevent frequent toggling
@@ -227,20 +227,20 @@ class GridPointController:
         if self.in_time_range("10:00", "22:00", weekday=SCHEDULED_CHARGE_DAY):
             mode = "Scheduled charge"
             self.power_target = self.get_new_power_target(
-                dc_power=dc_power,
-                dc_power_target=SCHEDULED_CHARGE_POWER,
-                min_power_limit=-SCHEDULED_CHARGE_POWER,
-                max_power_limit=max_power_limit
+                dc_power = dc_power,
+                dc_power_target = SCHEDULED_CHARGE_POWER,
+                min_power_limit = - SCHEDULED_CHARGE_POWER * 1.20, # allow 20 % more
+                max_power_limit = max_power_limit
             )
 
         # If discharging is allowed, calculate the power target dynamically
         elif self.discharge_allowed is True:
             mode = "Normal"
             self.power_target = self.get_new_power_target(
-                dc_power=dc_power,
-                dc_power_target=dc_power_target,
-                min_power_limit=min_power_limit,
-                max_power_limit=max_power_limit
+                dc_power = dc_power,
+                dc_power_target = dc_power_target,
+                min_power_limit = min_power_limit,
+                max_power_limit = max_power_limit
             )
 
         # If discharging is not allowed, set power target to zero
@@ -269,11 +269,11 @@ class GridPointController:
         print(
             f"[{mode}] "
             f"SoC: {soc:5.1f} %, "
-            f"L1: {load_L1:8.1f} W, L2: {load_L2:8.1f} W, L3: {load_L3:8.1f} W, "
-            f"Total: {total_load:8.1f} W, DC Power: {dc_power:8.1f} W, "
-            f"Min Power Limit: {min_power_limit:8.1f} W, Max Power Limit: {max_power_limit:8.1f} W, "
-            f"Power Target: {self.power_target:8.1f} W, "
-            f"Target: {target_setpoint:8.1f} W, Setpoint: {new_setpoint:8.1f} W"
+            f"L1: {load_L1:7.1f} W, L2: {load_L2:7.1f} W, L3: {load_L3:7.1f} W, "
+            f"Total: {total_load:7.1f} W, DC Power: {dc_power:7.1f} W, "
+            f"Min Power Limit: {min_power_limit:7.1f} W, Max Power Limit: {max_power_limit:7.1f} W, "
+            f"Power Target: {self.power_target:7.1f} W, "
+            f"Target: {target_setpoint:7.1f} W, Setpoint: {new_setpoint:7.1f} W"
         )
 
         self.write_setting(GRID_SETPOINT_PATH, new_setpoint)
