@@ -32,15 +32,15 @@ SCHEDULED_CHARGE_DAY = 6
 # Scheduled charge power (W)
 SCHEDULED_CHARGE_POWER = 1000
 # Discharging is allowed when SoC is equal to or above this threshold
-DISCHARGE_SOC_LIMIT = 85
+DISCHARGE_SOC_LIMIT = 83
 # Margin for hysteresis to prevent frequent toggling
 DISCHARGE_HYSTERESIS_MARGIN = 1
 
 # Mapping: SoC (%) -> minimal inverter power in watts, dc power target in watts (min_soc, max_soc, min_power_limit, dc_power_target)
 SOC_RANGES = [
-    (  0,  84,  500,   100),   # 0–84 %, 500 W min. inverter power, charge battery with 100 W
+    (  0,  84,  500,   200),   # 0–84 %, 500 W min. inverter power, charge battery with 200 W
     ( 85,  85,  500,     0),   # 85 %, 500 W min. inverter power, keep battery idle
-    ( 86,  86, 1000,  -100),   # 86 %, 1000 W min. inverter power, discharge with 100 W
+    ( 86,  86, 1000,  -200),   # 86 %, 1000 W min. inverter power, discharge with 200 W
     ( 87,  87, 1500,  -500),   # 87 %, 1500 W min. inverter power, discharge with 500 W
     ( 88,  88, 2000, -1000),   # 88 %, 2000 W min. inverter power, discharge with 1000 W
     ( 89,  89, 3000, -2000),   # 89 %, 3000 W min. inverter power, discharge with 2000 W
