@@ -2,12 +2,18 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import time
 from datetime import datetime
 
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 import dbus
+
+# Victron packages
+# Your updated path here:
+sys.path.insert(1, '/opt/victronenergy/dbus-systemcalc-py/ext/velib_python')
+from settingsdevice import SettingsDevice
 
 # D-Bus paths for reading from com.victronenergy.system
 SOC_PATH = '/Dc/Battery/Soc'
@@ -32,7 +38,7 @@ SCHEDULED_CHARGE_DAY = 6
 # Scheduled charge power (W)
 SCHEDULED_CHARGE_POWER = 1000
 # Discharging is allowed when SoC is equal to or above this threshold
-DISCHARGE_SOC_LIMIT = 83
+DISCHARGE_SOC_LIMIT = 85
 # Margin for hysteresis to prevent frequent toggling
 DISCHARGE_HYSTERESIS_MARGIN = 1
 
@@ -65,10 +71,23 @@ def validate_soc_ranges():
 
 # Validation will take place during module import.
 validate_soc_ranges()
+
+# -------------------------------
+# Gripoint Controller class
+# -------------------------------
 class GridPointController:
     def __init__(self):
         # Connect to the system D-Bus
         self.bus = dbus.SystemBus()
+
+        # Register settings device to allow user override of max feed-in power via D-Bus
+        self.settings = SettingsDevice(
+            bus=self.bus,
+            supportedSettings={
+                'maxfeedin': ['/Settings/AutomaticGridPoint/MaxGridFeedIn', -1, -10000, 10000],
+            },
+            eventCallback=self.handle_setting_change
+        )
 
         # Initial state for discharge hysteresis
         self.discharge_allowed = None
@@ -82,6 +101,9 @@ class GridPointController:
 
         # Schedule update every 5 seconds (5000 ms)
         GLib.timeout_add(5000, self.update_setpoint)
+
+    def handle_setting_change(self, setting, old, new):
+        print(f"[Settings] {setting} changed from {old} to {new}")
 
     def read_value(self, path):
         """
@@ -266,6 +288,12 @@ class GridPointController:
         else:
             step = self.setpoint_step if delta > 0 else -self.setpoint_step
             new_setpoint = self.last_setpoint + step
+
+        # Override from D-Bus if available
+        override = self.settings['maxfeedin']
+        if override != -1:
+            new_setpoint = max(-override, new_setpoint)  # Override acts as a ceiling for feed-in (negative value)
+            mode += " (MaxGridFeedIn Override - {:.1f} W)".format(override)
 
         # Update stored value
         self.last_setpoint = new_setpoint
