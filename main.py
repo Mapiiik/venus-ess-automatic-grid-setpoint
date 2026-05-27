@@ -11,7 +11,6 @@ from gi.repository import GLib
 import dbus
 
 # Victron packages
-# Your updated path here:
 sys.path.insert(1, '/opt/victronenergy/dbus-systemcalc-py/ext/velib_python')
 from settingsdevice import SettingsDevice
 
@@ -41,7 +40,7 @@ LOCAL_TIMEZONE = 'Europe/Prague'
 MAX_DAY_DISCHARGE = 4500
 # Max discharge power allowed during night (W) (21:00-07:00)
 MAX_NIGHT_DISCHARGE = 1600
-# Scheduled charge day (W) (0=Monday, ..., 6=Sunday)
+# Scheduled charge day (0=Monday, ..., 6=Sunday)
 SCHEDULED_CHARGE_DAY = 6
 # Scheduled charge power (W)
 SCHEDULED_CHARGE_POWER = 1000
@@ -81,9 +80,9 @@ def validate_soc_ranges():
 validate_soc_ranges()
 
 # -------------------------------
-# Gripoint Controller class
+# Grid Setpoint Controller class
 # -------------------------------
-class GridPointController:
+class GridSetpointController:
     def __init__(self):
         # Connect to the system D-Bus
         self.bus = dbus.SystemBus()
@@ -92,7 +91,7 @@ class GridPointController:
         self.settings = SettingsDevice(
             bus=self.bus,
             supportedSettings={
-                'maxfeedin': ['/Settings/AutomaticGridPoint/MaxGridFeedIn', -1, -10000, 10000],
+                'maxfeedin': ['/Settings/AutomaticGridSetpoint/MaxGridFeedInPower', -1, -10000, 10000],
             },
             eventCallback=self.handle_setting_change
         )
@@ -265,7 +264,7 @@ class GridPointController:
         # Determine max power limit based on time of day
         # Night mode: from 21:00 to 07:00 → use MAX_NIGHT_DISCHARGE
         # Day mode: otherwise → use MAX_DAY_DISCHARGE
-        if self.in_time_range("21:00", "7:00"):
+        if self.in_time_range("21:00", "07:00"):
             max_power_limit = MAX_NIGHT_DISCHARGE
         else:
             max_power_limit = MAX_DAY_DISCHARGE
@@ -343,7 +342,7 @@ if __name__ == '__main__':
     time.tzset()
     # Set GLib as the default main loop for D-Bus
     DBusGMainLoop(set_as_default=True)
-    controller = GridPointController()
+    controller = GridSetpointController()
     # Start the GLib main loop
     mainloop = GLib.MainLoop()
     mainloop.run()
