@@ -1,0 +1,6 @@
+# Shell scripts and Python run on Venus OS (Linux/BusyBox) – force LF line endings
+# so the shebang does not break even when cloning from Windows.
+* text=auto eol=lf
+*.sh    text eol=lf
+*.py    text eol=lf
+service/run text eol=lf
