@@ -1,5 +1,6 @@
 #!/usr/bin/python3 -u
 # -*- coding: utf-8 -*-
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 import os
 import sys
@@ -31,34 +32,19 @@ GRID_SETPOINT_PATH_OVERRIDE = '/Overrides/Setpoint'
 # Maximal discharge power path
 MAX_DISCHARGE_PATH_OVERRIDE = '/Overrides/MaxDischargePower'
 
-# Set to True to write setpoint and discharge limit to hub4 override paths instead of settings paths (for better compatibility with other controllers running on the same system)
-USE_HUB4_OVERRIDES = True
-
-# Define your local timezone as a constant
-LOCAL_TIMEZONE = 'Europe/Prague'
-# Max discharge power allowed during day (W)
-MAX_DAY_DISCHARGE = 4500
-# Max discharge power allowed during night (W) (21:00-07:00)
-MAX_NIGHT_DISCHARGE = 1600
-# Scheduled charge day (0=Monday, ..., 6=Sunday)
-SCHEDULED_CHARGE_DAY = 6
-# Scheduled charge power (W)
-SCHEDULED_CHARGE_POWER = 1000
-# Discharging is allowed when SoC is equal to or above this threshold
-DISCHARGE_SOC_LIMIT = 85
-# Margin for hysteresis to prevent frequent toggling
-DISCHARGE_HYSTERESIS_MARGIN = 1
-
-# Mapping: SoC (%) -> minimal inverter power in watts, dc power target in watts (min_soc, max_soc, min_power_limit, dc_power_target)
-SOC_RANGES = [
-    (  0,  84,  500,   200),   # 0–84 %, 500 W min. inverter power, charge battery with 200 W
-    ( 85,  85,  500,     0),   # 85 %, 500 W min. inverter power, keep battery idle
-    ( 86,  86, 1000,  -200),   # 86 %, 1000 W min. inverter power, discharge with 200 W
-    ( 87,  87, 1500,  -500),   # 87 %, 1500 W min. inverter power, discharge with 500 W
-    ( 88,  88, 2000, -1000),   # 88 %, 2000 W min. inverter power, discharge with 1000 W
-    ( 89,  89, 3000, -2000),   # 89 %, 3000 W min. inverter power, discharge with 2000 W
-    ( 90, 100, 4000, -3000)    # 90–100 %, 4000 W min. inverter power, discharge with 3000 W
-]
+# User configuration – copy config.py.example to config.py and adjust to your needs
+from config import (
+    LOCAL_TIMEZONE,
+    USE_HUB4_OVERRIDES,
+    MAX_DAY_DISCHARGE,
+    MAX_NIGHT_DISCHARGE,
+    SCHEDULED_CHARGE_DAY,
+    SCHEDULED_CHARGE_POWER,
+    DISCHARGE_SOC_LIMIT,
+    DISCHARGE_HYSTERESIS_MARGIN,
+    SETPOINT_STEP,
+    SOC_RANGES,
+)
 
 def get_limits_for_soc(soc_value):
     soc_int = int(soc_value)
@@ -101,7 +87,7 @@ class GridSetpointController:
 
         # Setpoint buffer
         self.last_setpoint = None  # Stores previous grid setpoint for gradual adjustment
-        self.setpoint_step = 100.0   # Max change per cycle in watts
+        self.setpoint_step = SETPOINT_STEP   # Max change per cycle in watts
 
         # Power target
         self.power_target = 0.0

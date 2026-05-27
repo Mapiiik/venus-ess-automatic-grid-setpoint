@@ -1,0 +1,70 @@
+# =============================================================================
+# venus-ess-automatic-grid-setpoint – configuration file
+# =============================================================================
+# Copy this file to config.py and adjust the values to match your installation.
+#   cp config.py.example config.py
+# =============================================================================
+
+# Your local timezone (used for time-of-day based rules)
+LOCAL_TIMEZONE = 'Europe/Prague'
+
+# Set to True to write setpoint and discharge limit to com.victronenergy.hub4
+# override paths instead of com.victronenergy.settings paths.
+# Recommended: reduces flash wear on Cerbo GX / CCGX and avoids conflicts
+# with other ESS controllers running on the same system.
+USE_HUB4_OVERRIDES = True
+
+# ---------------------------------------------------------------------------
+# Discharge limits
+# ---------------------------------------------------------------------------
+
+# Max discharge power allowed during the day (W)
+MAX_DAY_DISCHARGE = 4500
+
+# Max discharge power allowed during the night (21:00–07:00) (W)
+MAX_NIGHT_DISCHARGE = 1600
+
+# Discharging is allowed when SoC is equal to or above this threshold (%)
+DISCHARGE_SOC_LIMIT = 85
+
+# Hysteresis margin to prevent frequent toggling (%)
+# Discharging is disabled when SoC drops below (DISCHARGE_SOC_LIMIT - DISCHARGE_HYSTERESIS_MARGIN)
+DISCHARGE_HYSTERESIS_MARGIN = 1
+
+# ---------------------------------------------------------------------------
+# Scheduled charging
+# ---------------------------------------------------------------------------
+
+# Day of the week for scheduled charging (0=Monday, ..., 6=Sunday)
+SCHEDULED_CHARGE_DAY = 6
+
+# Scheduled charge power target (W) – positive value means charging from grid
+SCHEDULED_CHARGE_POWER = 1000
+
+# ---------------------------------------------------------------------------
+# Setpoint ramping
+# ---------------------------------------------------------------------------
+
+# Maximum change of grid setpoint per cycle (W)
+# Lower values result in smoother transitions, higher values in faster response.
+SETPOINT_STEP = 100.0
+
+# ---------------------------------------------------------------------------
+# SoC ranges
+# ---------------------------------------------------------------------------
+# Maps battery SoC (%) to inverter and battery power targets.
+# Each entry: (min_soc, max_soc, min_power_limit, dc_power_target)
+#   min_power_limit  – minimum inverter output power (W) – prevents low-power oscillation
+#   dc_power_target  – desired DC power flow (W): positive = charge battery, negative = discharge
+#
+# Ranges must be contiguous and cover 0–100 % without gaps or overlaps.
+
+SOC_RANGES = [
+    (  0,  84,  500,   200),   # 0–84 %,   500 W min. inverter power, charge battery with 200 W
+    ( 85,  85,  500,     0),   # 85 %,     500 W min. inverter power, keep battery idle
+    ( 86,  86, 1000,  -200),   # 86 %,    1000 W min. inverter power, discharge with 200 W
+    ( 87,  87, 1500,  -500),   # 87 %,    1500 W min. inverter power, discharge with 500 W
+    ( 88,  88, 2000, -1000),   # 88 %,    2000 W min. inverter power, discharge with 1000 W
+    ( 89,  89, 3000, -2000),   # 89 %,    3000 W min. inverter power, discharge with 2000 W
+    ( 90, 100, 4000, -3000)    # 90–100 %, 4000 W min. inverter power, discharge with 3000 W
+]
