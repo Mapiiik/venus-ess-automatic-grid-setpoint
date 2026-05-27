@@ -22,10 +22,18 @@ ACOUT1_L1_POWER_PATH = '/Ac/ConsumptionOnOutput/L1/Power'
 ACOUT1_L2_POWER_PATH = '/Ac/ConsumptionOnOutput/L2/Power'
 ACOUT1_L3_POWER_PATH = '/Ac/ConsumptionOnOutput/L3/Power'
 
-# D-Bus path for writing to com.victronenergy.settings
+# D-Bus paths for writing to com.victronenergy.settings
 GRID_SETPOINT_PATH = '/Settings/CGwacs/AcPowerSetPoint'
 # Maximal discharge power path
 MAX_DISCHARGE_PATH = '/Settings/CGwacs/MaxDischargePower'
+
+# D-Bus paths for writing to com.victronenergy.hub4 (Overrides)
+GRID_SETPOINT_PATH_OVERRIDE = '/Overrides/Setpoint'
+# Maximal discharge power path
+MAX_DISCHARGE_PATH_OVERRIDE = '/Overrides/MaxDischargePower'
+
+# Set to True to write setpoint and discharge limit to hub4 override paths instead of settings paths (for better compatibility with other controllers running on the same system)
+USE_HUB4_OVERRIDES = True
 
 # Define your local timezone as a constant
 LOCAL_TIMEZONE = 'Europe/Prague'
@@ -116,12 +124,22 @@ class GridPointController:
         except Exception:
             return 0.0
 
-    def write_setting(self, path, value):
+    def write_settings(self, path, value):
         """
         Write a value to a settings path using com.victronenergy.settings API.
         """
         try:
             obj = self.bus.get_object('com.victronenergy.settings', path)
+            obj.SetValue(dbus.Double(value), dbus_interface='com.victronenergy.BusItem')
+        except Exception as e:
+            print(f"Error writing {path}: {e}")
+
+    def write_hub4(self, path, value):
+        """
+        Write a value to a hub4 path using com.victronenergy.hub4 API.
+        """
+        try:
+            obj = self.bus.get_object('com.victronenergy.hub4', path)
             obj.SetValue(dbus.Double(value), dbus_interface='com.victronenergy.BusItem')
         except Exception as e:
             print(f"Error writing {path}: {e}")
@@ -216,7 +234,11 @@ class GridPointController:
         if write_change:
             # -1 means unlimited discharge
             value = -1 if self.discharge_allowed else 0
-            self.write_setting(MAX_DISCHARGE_PATH, value)
+            if USE_HUB4_OVERRIDES:
+                self.write_hub4(MAX_DISCHARGE_PATH_OVERRIDE, value)
+            else:
+                self.write_settings(MAX_DISCHARGE_PATH, value)
+
             print(f"[DischargeControl] SoC: {soc:.1f} % → DischargeAllowed: {self.discharge_allowed} → MaxDischargePower: {value}")
 
     def update_setpoint(self):
@@ -308,7 +330,11 @@ class GridPointController:
             f"Target: {target_setpoint:7.1f} W, Setpoint: {new_setpoint:7.1f} W"
         )
 
-        self.write_setting(GRID_SETPOINT_PATH, new_setpoint)
+        if USE_HUB4_OVERRIDES:
+            self.write_hub4(GRID_SETPOINT_PATH_OVERRIDE, new_setpoint)
+        else:
+            self.write_settings(GRID_SETPOINT_PATH, new_setpoint)
+
         return True  # Keep the timer running
 
 if __name__ == '__main__':
