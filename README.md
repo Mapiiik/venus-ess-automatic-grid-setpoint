@@ -135,6 +135,11 @@ rm -rf /data/venus-ess-automatic-grid-setpoint
 
 ## License
 
-Licensed under the **GNU Affero General Public License v3.0** — see [LICENSE.md](LICENSE.md).
+Licensed under the **GNU Affero General Public License v3.0** (AGPL‑3.0).
+See [LICENSE.md](LICENSE.md) for the full text.
 
 Provided "as is", without warranty of any kind. Use at your own risk.
+
+## Author
+
+Martin Patočka — <mapik@mapik.net>
