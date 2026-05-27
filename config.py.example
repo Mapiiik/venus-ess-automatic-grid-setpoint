@@ -8,10 +8,13 @@
 # Your local timezone (used for time-of-day based rules)
 LOCAL_TIMEZONE = 'Europe/Prague'
 
-# Set to True to write setpoint and discharge limit to com.victronenergy.hub4
-# override paths instead of com.victronenergy.settings paths.
+# Set to True to write the grid setpoint to the com.victronenergy.hub4
+# override path instead of the com.victronenergy.settings path.
 # Recommended: reduces flash wear on Cerbo GX / CCGX and avoids conflicts
 # with other ESS controllers running on the same system.
+# Note: the discharge limit (MaxDischargePower) is always written to the
+# persistent setting regardless of this flag – only that triggers the ESS "#7"
+# reason code (discharge disabled), and it changes too rarely to wear the flash.
 USE_HUB4_OVERRIDES = True
 
 # ---------------------------------------------------------------------------

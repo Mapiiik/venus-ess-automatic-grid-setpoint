@@ -46,10 +46,8 @@ GRID_SETPOINT_PATH = '/Settings/CGwacs/AcPowerSetPoint'
 # Maximal discharge power path
 MAX_DISCHARGE_PATH = '/Settings/CGwacs/MaxDischargePower'
 
-# D-Bus paths for writing to com.victronenergy.hub4 (Overrides)
+# D-Bus path for writing to com.victronenergy.hub4 (Overrides)
 GRID_SETPOINT_PATH_OVERRIDE = '/Overrides/Setpoint'
-# Maximal discharge power path
-MAX_DISCHARGE_PATH_OVERRIDE = '/Overrides/MaxDischargePower'
 
 # User configuration – copy config.py.example to config.py and adjust to your needs
 from config import (
@@ -238,10 +236,11 @@ class GridSetpointController:
         if write_change:
             # -1 means unlimited discharge
             value = -1 if self.discharge_allowed else 0
-            if USE_HUB4_OVERRIDES:
-                self.write_hub4(MAX_DISCHARGE_PATH_OVERRIDE, value)
-            else:
-                self.write_settings(MAX_DISCHARGE_PATH, value)
+            # Always write to the persistent setting (not the hub4 override).
+            # Only the setting triggers the ESS "#7" reason code (discharge disabled
+            # by configured limit). The value changes rarely (SoC hysteresis crossing),
+            # so flash wear is negligible – unlike the grid setpoint below.
+            self.write_settings(MAX_DISCHARGE_PATH, value)
 
             print(f"[DischargeControl] SoC: {soc:.1f} % → DischargeAllowed: {self.discharge_allowed} → MaxDischargePower: {value}")
 

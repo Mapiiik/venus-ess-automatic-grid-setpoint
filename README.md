@@ -39,8 +39,10 @@ Every 5 seconds the controller:
 6. Computes the target grid setpoint (`total_load − power_target`) and **ramps** the actual
    setpoint toward it by at most `SETPOINT_STEP` watts per cycle.
 7. Applies an optional **feed-in ceiling** from the `MaxGridFeedInPower` D-Bus setting.
-8. Writes the resulting **setpoint** and **discharge limit** either to the hub4 override paths
-   (`USE_HUB4_OVERRIDES = True`, recommended) or to the persistent settings paths.
+8. Writes the resulting **setpoint** either to the hub4 override path
+   (`USE_HUB4_OVERRIDES = True`, recommended) or to the persistent settings path.
+   The **discharge limit** is always written to the persistent setting (required for
+   the ESS "#7" discharge-disabled state; it changes too rarely to wear the flash).
 
 ## Requirements
 
@@ -90,7 +92,7 @@ All user settings live in **`config.py`** (copied from `config.py.example`). Key
 | Setting | Description |
 |---|---|
 | `LOCAL_TIMEZONE` | Timezone used for time-of-day rules, e.g. `'Europe/Prague'`. |
-| `USE_HUB4_OVERRIDES` | `True` (recommended) writes to hub4 override paths; `False` writes to persistent settings. |
+| `USE_HUB4_OVERRIDES` | `True` (recommended) writes the grid setpoint to the hub4 override path; `False` writes it to persistent settings. The discharge limit always goes to persistent settings. |
 | `MAX_DAY_DISCHARGE` | Max discharge power during the day (W). |
 | `MAX_NIGHT_DISCHARGE` | Max discharge power at night, 21:00–07:00 (W). |
 | `DISCHARGE_SOC_LIMIT` | SoC (%) at or above which discharging is allowed. |
